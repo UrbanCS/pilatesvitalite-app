@@ -1,0 +1,9 @@
+{
+  "require": {
+    "minishlink/web-push": "^9.0"
+  },
+  "config": {
+    "optimize-autoloader": true
+  }
+}
+

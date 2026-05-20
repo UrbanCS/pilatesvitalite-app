@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pilates Vitalite">
+  <rect width="512" height="512" rx="112" fill="#edf6fb"/>
+  <circle cx="256" cy="256" r="184" fill="#075f9f"/>
+  <path d="M166 314c44-92 104-150 180-174 15-5 26 14 15 25-53 51-91 105-114 161 51-26 93-62 126-107 10-14 32-5 29 12-15 86-89 157-177 170-49 7-80-38-59-87Z" fill="#ffffff"/>
+  <path d="M177 177c18-28 48-47 82-50 18-2 27 20 14 32-28 25-56 44-85 56-22 10-36-18-11-38Z" fill="#f58220"/>
+  <text x="256" y="352" text-anchor="middle" font-family="Arial, sans-serif" font-size="76" font-weight="700" fill="#ffffff">PV</text>
+</svg>

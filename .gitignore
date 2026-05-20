@@ -1,0 +1,9 @@
+node_modules/
+vendor/
+frontend/dist/
+local-public/
+*.tsbuildinfo
+.env
+.DS_Store
+backend/config/config.php
+backend/storage/logs/*.log
