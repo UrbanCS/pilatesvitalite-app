@@ -86,10 +86,80 @@ final class SnapshotRepository
         );
     }
 
-    public function activeSubscriptions(): array
+    public function subscriptionIdForEndpoint(string $endpoint): ?int
     {
+        $row = $this->database->fetchOne(
+            'SELECT id FROM push_subscriptions WHERE endpoint_hash = :endpoint_hash LIMIT 1',
+            ['endpoint_hash' => hash('sha256', $endpoint)]
+        );
+
+        return $row === null ? null : (int) $row['id'];
+    }
+
+    public function preferencesForEndpoint(string $endpoint): ?array
+    {
+        $subscriptionId = $this->subscriptionIdForEndpoint($endpoint);
+        if ($subscriptionId === null) {
+            return null;
+        }
+
+        $rows = $this->database->fetchAll(
+            'SELECT category, is_enabled
+             FROM push_subscription_preferences
+             WHERE subscription_id = :subscription_id',
+            ['subscription_id' => $subscriptionId]
+        );
+
+        return NotificationPreferences::effective($rows);
+    }
+
+    public function savePreferencesForEndpoint(string $endpoint, array $preferences): ?array
+    {
+        $subscriptionId = $this->subscriptionIdForEndpoint($endpoint);
+        if ($subscriptionId === null) {
+            return null;
+        }
+
+        foreach ($preferences as $category => $isEnabled) {
+            $this->database->execute(
+                'INSERT INTO push_subscription_preferences
+                    (subscription_id, category, is_enabled, created_at, updated_at)
+                 VALUES
+                    (:subscription_id, :category, :is_enabled, NOW(), NOW())
+                 ON DUPLICATE KEY UPDATE
+                    is_enabled = VALUES(is_enabled),
+                    updated_at = NOW()',
+                [
+                    'subscription_id' => $subscriptionId,
+                    'category' => $category,
+                    'is_enabled' => $isEnabled ? 1 : 0,
+                ]
+            );
+        }
+
+        return $this->preferencesForEndpoint($endpoint);
+    }
+
+    public function activeSubscriptions(?string $category = null): array
+    {
+        if ($category === null) {
+            return $this->database->fetchAll(
+                'SELECT * FROM push_subscriptions WHERE is_active = 1 ORDER BY id ASC'
+            );
+        }
+
+        $defaultEnabled = NotificationPreferences::defaultFor($category) ? '1' : '0';
+
         return $this->database->fetchAll(
-            'SELECT * FROM push_subscriptions WHERE is_active = 1 ORDER BY id ASC'
+            'SELECT ps.*
+             FROM push_subscriptions ps
+             LEFT JOIN push_subscription_preferences pref
+               ON pref.subscription_id = ps.id
+              AND pref.category = :category
+             WHERE ps.is_active = 1
+               AND COALESCE(pref.is_enabled, ' . $defaultEnabled . ') = 1
+             ORDER BY ps.id ASC',
+            ['category' => $category]
         );
     }
 
@@ -140,6 +210,14 @@ final class SnapshotRepository
                 $articles[] = $payload;
             }
         }
+
+        usort($articles, static function (array $left, array $right): int {
+            $dateComparison = app_date_sort_key($right['date'] ?? null) <=> app_date_sort_key($left['date'] ?? null);
+
+            return $dateComparison !== 0
+                ? $dateComparison
+                : strcmp((string) ($left['id'] ?? ''), (string) ($right['id'] ?? ''));
+        });
 
         return [
             'fetchedAt' => date(DATE_ATOM),

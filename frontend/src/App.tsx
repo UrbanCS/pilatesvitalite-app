@@ -2,13 +2,39 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BottomNav } from './components/BottomNav';
 import { ErrorBlock, LoadingBlock } from './components/StateBlocks';
 import { getLatestContent } from './lib/api';
-import { readPushStatus, registerServiceWorker, subscribeToPush, unsubscribeFromPush } from './lib/push';
+import {
+  pushIsSupported,
+  readPushPreferences,
+  readPushStatus,
+  registerServiceWorker,
+  subscribeToPush,
+  unsubscribeFromPush,
+  updatePushPreferences
+} from './lib/push';
 import { AboutPage } from './pages/AboutPage';
 import { ArticleDetailPage } from './pages/ArticleDetailPage';
 import { BlogPage } from './pages/BlogPage';
 import { ContactPage } from './pages/ContactPage';
 import { HomePage } from './pages/HomePage';
-import type { BlogArticle, LatestResponse, PushStatus, SectionName } from './types';
+import type {
+  BlogArticle,
+  LatestResponse,
+  NotificationCategory,
+  NotificationPreferences,
+  PushStatus,
+  SectionName
+} from './types';
+
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  site_updates: true,
+  blog: true,
+  offers: true,
+  newsletter: true
+};
+
+function hasSelectedPreference(preferences: NotificationPreferences) {
+  return Object.values(preferences).some(Boolean);
+}
 
 function parseHash() {
   const hash = window.location.hash.replace(/^#\/?/, '');
@@ -37,6 +63,12 @@ export default function App() {
   const [pushStatus, setPushStatus] = useState<PushStatus>('default');
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState<string | undefined>();
+  const [pushMessage, setPushMessage] = useState<string | undefined>();
+  const [pushPreferences, setPushPreferences] = useState<NotificationPreferences>(() => ({
+    ...DEFAULT_NOTIFICATION_PREFERENCES
+  }));
+  const [preferencesLoading, setPreferencesLoading] = useState(false);
+  const [preferencesDirty, setPreferencesDirty] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -53,10 +85,65 @@ export default function App() {
 
   useEffect(() => {
     refresh();
-    registerServiceWorker()
-      .then(() => readPushStatus())
-      .then(setPushStatus)
-      .catch(() => setPushStatus('unsupported'));
+    let cancelled = false;
+
+    async function initializePush() {
+      if (!pushIsSupported()) {
+        if (!cancelled) {
+          setPushStatus('unsupported');
+        }
+        return;
+      }
+
+      try {
+        await registerServiceWorker();
+        const status = await readPushStatus();
+        if (cancelled) {
+          return;
+        }
+
+        setPushStatus(status);
+        if (status !== 'subscribed') {
+          return;
+        }
+
+        setPreferencesLoading(true);
+        try {
+          const preferences = await readPushPreferences();
+          if (!cancelled) {
+            setPushPreferences(preferences);
+            setPreferencesDirty(false);
+          }
+        } catch (preferencesError) {
+          if (!cancelled) {
+            setPushError(
+              preferencesError instanceof Error
+                ? preferencesError.message
+                : 'Impossible de charger vos préférences de notifications.'
+            );
+          }
+        } finally {
+          if (!cancelled) {
+            setPreferencesLoading(false);
+          }
+        }
+      } catch (initializationError) {
+        if (!cancelled) {
+          setPushStatus(Notification.permission === 'denied' ? 'denied' : Notification.permission);
+          setPushError(
+            initializationError instanceof Error
+              ? initializationError.message
+              : "Impossible d'initialiser les notifications."
+          );
+        }
+      }
+    }
+
+    initializePush();
+
+    return () => {
+      cancelled = true;
+    };
   }, [refresh]);
 
   useEffect(() => {
@@ -77,14 +164,59 @@ export default function App() {
   };
 
   const subscribe = async () => {
+    if (!hasSelectedPreference(pushPreferences)) {
+      setPushError('Choisissez au moins une catégorie de notifications.');
+      return;
+    }
+
     setPushBusy(true);
     setPushError(undefined);
+    setPushMessage(undefined);
     try {
-      await subscribeToPush();
+      const result = await subscribeToPush(pushPreferences);
+      setPushPreferences(result.preferences);
       setPushStatus(await readPushStatus());
+      setPreferencesDirty(false);
+      setPushMessage('Notifications activées selon vos choix.');
     } catch (subscribeError) {
       setPushError(subscribeError instanceof Error ? subscribeError.message : "Impossible d'activer les notifications.");
-      setPushStatus(await readPushStatus());
+      try {
+        setPushStatus(await readPushStatus());
+      } catch {
+        // Preserve the original subscription error when status reconciliation also fails.
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const changePushPreference = (category: NotificationCategory, enabled: boolean) => {
+    setPushPreferences((current) => ({ ...current, [category]: enabled }));
+    setPreferencesDirty(true);
+    setPushError(undefined);
+    setPushMessage(undefined);
+  };
+
+  const savePushPreferences = async () => {
+    if (!hasSelectedPreference(pushPreferences)) {
+      setPushError('Choisissez au moins une catégorie de notifications.');
+      return;
+    }
+
+    setPushBusy(true);
+    setPushError(undefined);
+    setPushMessage(undefined);
+    try {
+      const preferences = await updatePushPreferences(pushPreferences);
+      setPushPreferences(preferences);
+      setPreferencesDirty(false);
+      setPushMessage('Vos préférences ont été enregistrées.');
+    } catch (preferencesError) {
+      setPushError(
+        preferencesError instanceof Error
+          ? preferencesError.message
+          : 'Impossible d’enregistrer vos préférences de notifications.'
+      );
     } finally {
       setPushBusy(false);
     }
@@ -93,13 +225,22 @@ export default function App() {
   const unsubscribe = async () => {
     setPushBusy(true);
     setPushError(undefined);
+    setPushMessage(undefined);
     try {
       await unsubscribeFromPush();
       setPushStatus(await readPushStatus());
+      setPushPreferences({ ...DEFAULT_NOTIFICATION_PREFERENCES });
+      setPreferencesDirty(false);
+      setPushMessage('Les notifications ont été désactivées.');
     } catch (unsubscribeError) {
       setPushError(
         unsubscribeError instanceof Error ? unsubscribeError.message : 'Impossible de désactiver les notifications.'
       );
+      try {
+        setPushStatus(await readPushStatus());
+      } catch {
+        // Preserve the original unsubscription error when status reconciliation also fails.
+      }
     } finally {
       setPushBusy(false);
     }
@@ -133,7 +274,13 @@ export default function App() {
         pushStatus={pushStatus}
         pushBusy={pushBusy}
         pushError={pushError}
+        pushMessage={pushMessage}
+        pushPreferences={pushPreferences}
+        preferencesLoading={preferencesLoading}
+        preferencesDirty={preferencesDirty}
         onSubscribe={subscribe}
+        onPreferenceChange={changePushPreference}
+        onSavePreferences={savePushPreferences}
         onUnsubscribe={unsubscribe}
         onArticleOpen={openArticle}
       />

@@ -12,13 +12,23 @@ $keys = is_array($input['keys'] ?? null) ? $input['keys'] : [];
 $p256dh = trim((string) ($keys['p256dh'] ?? $input['p256dh'] ?? ''));
 $auth = trim((string) ($keys['auth'] ?? $input['auth'] ?? ''));
 $userAgent = trim((string) ($input['userAgent'] ?? ($_SERVER['HTTP_USER_AGENT'] ?? '')));
+$preferences = null;
 
 if ($endpoint === '' || !filter_var($endpoint, FILTER_VALIDATE_URL) || $p256dh === '' || $auth === '') {
     Response::json(['ok' => false, 'error' => 'Abonnement push invalide.'], 422);
 }
 
+if (array_key_exists('preferences', $input)) {
+    try {
+        $preferences = NotificationPreferences::normalizeInput($input['preferences']);
+    } catch (InvalidArgumentException $error) {
+        Response::json(['ok' => false, 'error' => $error->getMessage()], 422);
+    }
+}
+
 try {
     $database = new Database(app_config());
+    $database->pdo()->beginTransaction();
     $database->execute(
         'INSERT INTO push_subscriptions
             (endpoint_hash, endpoint, p256dh, auth, user_agent, is_active, created_at, updated_at)
@@ -40,7 +50,21 @@ try {
         ]
     );
 
-    Response::json(['ok' => true]);
-} catch (Throwable $error) {
-    Response::json(['ok' => false, 'error' => "Impossible de sauvegarder l'abonnement.", 'detail' => $error->getMessage()], 500);
+    $repository = new SnapshotRepository($database);
+    $effectivePreferences = $preferences === null
+        ? $repository->preferencesForEndpoint($endpoint)
+        : $repository->savePreferencesForEndpoint($endpoint, $preferences);
+
+    $database->pdo()->commit();
+
+    Response::json([
+        'ok' => true,
+        'preferences' => $effectivePreferences ?? NotificationPreferences::defaults(),
+    ]);
+} catch (Throwable) {
+    if (isset($database) && $database->pdo()->inTransaction()) {
+        $database->pdo()->rollBack();
+    }
+
+    Response::json(['ok' => false, 'error' => "Impossible de sauvegarder l'abonnement."], 500);
 }

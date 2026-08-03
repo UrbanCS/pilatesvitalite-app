@@ -9,6 +9,7 @@ return [
     'APP_BASE_URL' => 'https://pilatesvitalite.webactiondemo.ca/pwa',
     'FINAL_DOMAIN' => 'https://pilatesvitalite.ca',
     'SOURCE_BASE_URL' => 'https://pilatesvitalite.webactiondemo.ca',
+    'SOURCE_APP_ENV_PATH' => '',
 
     'VAPID_PUBLIC_KEY' => '',
     'VAPID_PRIVATE_KEY' => '',
@@ -22,10 +23,14 @@ return [
         'about' => 'https://pilatesvitalite.webactiondemo.ca/about-us',
         'blog' => 'https://pilatesvitalite.webactiondemo.ca/blogs',
         'contact' => 'https://pilatesvitalite.webactiondemo.ca/contact',
+        'shop' => 'https://pilatesvitalite.webactiondemo.ca/shop',
+        'membership' => 'https://pilatesvitalite.webactiondemo.ca/membership',
     ],
 
     'HTTP_TIMEOUT' => 15,
     'MAX_BLOG_ITEMS' => 10,
+    'MAX_SHOP_PAGES' => 10,
+    'MAX_NEWSLETTER_ITEMS' => 500,
     'NOTIFY_ON_FIRST_RUN' => false,
     'ENABLE_PUSH_SEND' => true,
 ];

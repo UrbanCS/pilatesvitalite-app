@@ -8,7 +8,7 @@ final class PushService
     {
     }
 
-    public function send(string $title, string $message, string $url, string $section): array
+    public function send(string $title, string $message, string $url, string $section, ?string $category = null): array
     {
         if (!($this->config['ENABLE_PUSH_SEND'] ?? true)) {
             return ['sent' => 0, 'failed' => 0, 'errors' => ['Push sending disabled in config.']];
@@ -30,7 +30,7 @@ final class PushService
             return ['sent' => 0, 'failed' => 0, 'errors' => ['VAPID keys are not configured.']];
         }
 
-        $subscriptions = $this->repository->activeSubscriptions();
+        $subscriptions = $this->repository->activeSubscriptions($category);
         $webPush = new \Minishlink\WebPush\WebPush([
             'VAPID' => [
                 'subject' => $subject,
@@ -44,6 +44,7 @@ final class PushService
             'body' => $message,
             'url' => $url,
             'section' => $section,
+            'category' => $category,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         foreach ($subscriptions as $subscription) {
@@ -84,4 +85,3 @@ final class PushService
         ];
     }
 }
-

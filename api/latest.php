@@ -5,11 +5,13 @@ declare(strict_types=1);
 require_once __DIR__ . '/../backend/lib/bootstrap.php';
 
 $config = app_config();
+$nextCourseCache = new NextCourseCache();
 
 try {
     $http = new HttpClient((int) app_config('HTTP_TIMEOUT', 15));
     $scraper = new Scraper($config, $http);
     $latest = $scraper->latest();
+    $latest['nextCourse'] = $nextCourseCache->read();
     $latest['ok'] = true;
     $latest['source'] = 'live';
 
@@ -20,6 +22,7 @@ try {
         $fallback = $repository->latestDataFromSnapshots($config);
 
         if ($fallback !== null && $fallback['home'] !== null && $fallback['about'] !== null) {
+            $fallback['nextCourse'] = $nextCourseCache->read();
             $fallback['ok'] = true;
             $fallback['source'] = 'database';
             Response::json($fallback);
@@ -34,4 +37,3 @@ try {
         'detail' => $liveError->getMessage(),
     ], 502);
 }
-

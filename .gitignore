@@ -7,3 +7,5 @@ local-public/
 .DS_Store
 backend/config/config.php
 backend/storage/logs/*.log
+backend/storage/check-updates.lock
+backend/storage/next-course.json

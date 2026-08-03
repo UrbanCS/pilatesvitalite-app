@@ -10,6 +10,17 @@ export interface BlogArticle {
   content?: string;
 }
 
+export interface NextCourse {
+  id: string;
+  title: string;
+  url: string;
+  date: string;
+  dateLabel?: string;
+  price?: string;
+  imageUrl?: string;
+  mode?: 'studio' | 'online';
+}
+
 export interface HomeContent {
   title: string;
   summary: string;
@@ -57,6 +68,7 @@ export interface LatestResponse {
     sourceUrl: string;
     articles: BlogArticle[];
   };
+  nextCourse?: NextCourse | null;
   contact: ContactContent;
 }
 
@@ -66,6 +78,17 @@ export interface PublicConfig {
   appBaseUrl: string;
   finalDomain: string;
   sourceUrls: Record<SectionName, string>;
+}
+
+export const NOTIFICATION_CATEGORIES = ['site_updates', 'blog', 'offers', 'newsletter'] as const;
+
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
+
+export type NotificationPreferences = Record<NotificationCategory, boolean>;
+
+export interface NotificationPreferencesResponse {
+  ok: boolean;
+  preferences: NotificationPreferences;
 }
 
 export type PushStatus = 'unsupported' | 'default' | 'granted' | 'denied' | 'subscribed';

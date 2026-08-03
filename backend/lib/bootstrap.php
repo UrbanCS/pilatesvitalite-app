@@ -16,7 +16,10 @@ if (file_exists($vendorAutoload)) {
 require_once __DIR__ . '/Response.php';
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/HttpClient.php';
+require_once __DIR__ . '/NotificationPreferences.php';
+require_once __DIR__ . '/NextCourseCache.php';
 require_once __DIR__ . '/Scraper.php';
+require_once __DIR__ . '/SourceNewsletterRepository.php';
 require_once __DIR__ . '/SnapshotRepository.php';
 require_once __DIR__ . '/PushService.php';
 
@@ -101,3 +104,27 @@ function app_json_hash(mixed $value): string
     return hash('sha256', json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
+function app_date_sort_key(?string $value): int
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return 0;
+    }
+
+    $normalized = str_ireplace(
+        [
+            'janvier', 'février', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+            'juillet', 'août', 'aout', 'septembre', 'octobre', 'novembre',
+            'décembre', 'decembre',
+        ],
+        [
+            'January', 'February', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'August', 'September', 'October', 'November',
+            'December', 'December',
+        ],
+        $value
+    );
+    $timestamp = strtotime($normalized);
+
+    return $timestamp === false ? 0 : $timestamp;
+}

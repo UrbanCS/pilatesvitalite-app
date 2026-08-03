@@ -1,4 +1,4 @@
-import type { LatestResponse, PublicConfig } from '../types';
+import type { LatestResponse, NotificationPreferences, NotificationPreferencesResponse, PublicConfig } from '../types';
 
 const API_BASE = (import.meta.env.VITE_API_BASE || './api').replace(/\/$/, '');
 
@@ -37,16 +37,37 @@ export function getPublicConfig() {
   return requestJson<PublicConfig>('/config.php');
 }
 
-export function saveSubscription(subscription: PushSubscription) {
-  return requestJson<{ ok: boolean }>('/subscribe.php', {
+export function saveSubscription(subscription: PushSubscription, preferences: NotificationPreferences) {
+  return requestJson<NotificationPreferencesResponse>('/subscribe.php', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       ...subscription.toJSON(),
-      userAgent: navigator.userAgent
+      userAgent: navigator.userAgent,
+      preferences
     })
+  });
+}
+
+export function getSubscriptionPreferences(endpoint: string) {
+  return requestJson<NotificationPreferencesResponse>('/preferences.php', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ endpoint })
+  });
+}
+
+export function saveSubscriptionPreferences(endpoint: string, preferences: NotificationPreferences) {
+  return requestJson<NotificationPreferencesResponse>('/preferences.php', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ endpoint, preferences })
   });
 }
 

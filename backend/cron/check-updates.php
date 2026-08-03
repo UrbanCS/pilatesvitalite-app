@@ -13,6 +13,29 @@ if (PHP_SAPI !== 'cli') {
     }
 }
 
+$storageDir = __DIR__ . '/../storage';
+if (!is_dir($storageDir) && !mkdir($storageDir, 0755, true) && !is_dir($storageDir)) {
+    echo "Unable to create cron storage directory.\n";
+    exit(1);
+}
+
+$lockHandle = fopen($storageDir . '/check-updates.lock', 'c');
+if ($lockHandle === false) {
+    echo "Unable to open cron lock.\n";
+    exit(1);
+}
+
+if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
+    fclose($lockHandle);
+    echo "Content check already running.\n";
+    exit(0);
+}
+
+register_shutdown_function(static function () use ($lockHandle): void {
+    flock($lockHandle, LOCK_UN);
+    fclose($lockHandle);
+});
+
 function cron_log_line(string $message): void
 {
     $line = '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL;
@@ -29,31 +52,73 @@ function cron_log_line(string $message): void
 function notification_target_url(array $item): string
 {
     $base = rtrim((string) app_config('APP_BASE_URL', './'), '/');
+    $section = (string) ($item['section'] ?? '');
 
-    if ($item['section'] === 'blog') {
+    if ($section === 'blog') {
         return $base . '/#/article/' . rawurlencode((string) $item['item_key']);
     }
 
-    if ($item['section'] === 'about') {
+    if ($section === 'about') {
         return $base . '/#/about';
+    }
+
+    if (in_array($section, ['course', 'package'], true)) {
+        $sourceUrl = (string) ($item['source_url'] ?? '');
+        if (filter_var($sourceUrl, FILTER_VALIDATE_URL)) {
+            return $sourceUrl;
+        }
     }
 
     return $base . '/#/home';
 }
 
+function notification_category(string $section): string
+{
+    return match ($section) {
+        'home', 'about' => 'site_updates',
+        'blog' => 'blog',
+        'course', 'package' => 'offers',
+        'newsletter' => 'newsletter',
+        default => throw new InvalidArgumentException('Unknown notification section: ' . $section),
+    };
+}
+
 function notification_message(array $item, bool $isNew): array
 {
-    if ($item['section'] === 'blog') {
+    $section = (string) ($item['section'] ?? '');
+
+    if ($section === 'blog') {
         return [
             'title' => $isNew ? 'Nouvel article Pilates Vitalité' : 'Article mis à jour',
             'message' => app_truncate((string) $item['title'], 180),
         ];
     }
 
-    if ($item['section'] === 'about') {
+    if ($section === 'about') {
         return [
             'title' => 'Mise à jour - À propos',
             'message' => 'La page À propos de Pilates Vitalité a été mise à jour.',
+        ];
+    }
+
+    if ($section === 'course') {
+        return [
+            'title' => 'Nouveau cours Pilates Vitalité',
+            'message' => app_truncate((string) $item['title'], 180),
+        ];
+    }
+
+    if ($section === 'package') {
+        return [
+            'title' => 'Nouveau forfait Pilates Vitalité',
+            'message' => app_truncate((string) $item['title'], 180),
+        ];
+    }
+
+    if ($section === 'newsletter') {
+        return [
+            'title' => 'Nouvelle infolettre Pilates Vitalité',
+            'message' => app_truncate((string) $item['title'], 180),
         ];
     }
 
@@ -73,10 +138,34 @@ try {
     $scraper = new Scraper($config, $http);
     $push = new PushService($config, $repository);
 
+    try {
+        $nextCourse = $scraper->nextCourse();
+        (new NextCourseCache())->write($nextCourse);
+        cron_log_line($nextCourse === null
+            ? 'Next course cache refreshed: no upcoming studio course.'
+            : sprintf(
+                'Next course cache refreshed: date=%s id=%s',
+                (string) $nextCourse['date'],
+                (string) $nextCourse['id']
+            ));
+    } catch (Throwable $nextCourseError) {
+        cron_log_line('Next course cache warning: ' . $nextCourseError->getMessage());
+    }
+
     $items = $scraper->watchedItems();
+    try {
+        $newsletterItems = (new SourceNewsletterRepository($config))->sentCampaignItems();
+        $items = array_merge($items, $newsletterItems);
+    } catch (Throwable $newsletterError) {
+        cron_log_line('Newsletter source warning: ' . $newsletterError->getMessage());
+    }
+
     $initialCounts = [];
-    foreach (['home', 'about', 'blog'] as $section) {
-        $initialCounts[$section] = $repository->countSection($section);
+    foreach ($items as $item) {
+        $section = (string) ($item['section'] ?? '');
+        if ($section !== '' && !array_key_exists($section, $initialCounts)) {
+            $initialCounts[$section] = $repository->countSection($section);
+        }
     }
 
     $changed = 0;
@@ -98,10 +187,12 @@ try {
 
         $isNew = $previous === null;
         $isInitialBootstrap = $previous === null && (($initialCounts[$section] ?? 0) === 0) && !app_config('NOTIFY_ON_FIRST_RUN', false);
-        $shouldNotify = !$isInitialBootstrap;
+        $onlyNotifyWhenNew = in_array($section, ['course', 'package', 'newsletter'], true);
+        $shouldNotify = !$isInitialBootstrap && (!$onlyNotifyWhenNew || $isNew);
 
         if (!$shouldNotify) {
-            cron_log_line(sprintf('Snapshot saved without notification (initial): %s/%s', $section, $itemKey));
+            $reason = $isInitialBootstrap ? 'initial' : 'update ignored';
+            cron_log_line(sprintf('Snapshot saved without notification (%s): %s/%s', $reason, $section, $itemKey));
             continue;
         }
 
@@ -111,7 +202,8 @@ try {
         }
 
         $copy = notification_message($item, $isNew);
-        $result = $push->send($copy['title'], $copy['message'], notification_target_url($item), $section);
+        $category = notification_category($section);
+        $result = $push->send($copy['title'], $copy['message'], notification_target_url($item), $section, $category);
         $sent = (int) ($result['sent'] ?? 0);
         $repository->logNotification(
             $section,
