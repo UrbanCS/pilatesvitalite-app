@@ -71,13 +71,13 @@ Modifier `backend/config/config.php` avec les identifiants MySQL, les URLs final
 
 ## Cron cPanel
 
-Commande recommandee:
+Commande cPanel actuellement utilisee:
 
 ```bash
-/usr/local/bin/php /home/USER/public_html/app/backend/cron/check-updates.php
+/usr/local/bin/php /home/pilatesvitalite/domains/pilatesvitalite.webactiondemo.ca/public_html/pwa/backend/cron/check-updates.php
 ```
 
-Frequence suggeree: toutes les 15 ou 30 minutes. Le premier passage initialise les snapshots sans envoyer de notifications, sauf si `NOTIFY_ON_FIRST_RUN` est mis a `true`.
+Frequence configuree: toutes les 10 minutes. Le premier passage initialise les snapshots sans envoyer de notifications, sauf si `NOTIFY_ON_FIRST_RUN` est mis a `true`.
 
 ## Securite
 
@@ -93,4 +93,4 @@ Frequence suggeree: toutes les 15 ou 30 minutes. Le premier passage initialise l
 - [Notifications push](docs/PUSH_NOTIFICATIONS.md)
 - [Audit technique](docs/AUDIT.md)
 - [Checklist finale](docs/TEST_CHECKLIST.md)
-
+- [Passation Codex](docs/CODEX_HANDOFF.md)

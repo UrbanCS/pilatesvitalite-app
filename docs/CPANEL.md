@@ -10,25 +10,29 @@ npm run build
 
 ## 2. Uploader le frontend
 
-Uploader le contenu de `frontend/dist/` dans un dossier public, par exemple:
+Uploader le contenu de `frontend/dist/` dans le dossier public de la PWA:
 
 ```text
-public_html/app/
+domains/pilatesvitalite.webactiondemo.ca/public_html/pwa/
 ```
 
 L'app doit etre accessible en HTTPS, par exemple:
 
 ```text
-https://pilatesvitalite.ca/app/
+https://pilatesvitalite.webactiondemo.ca/pwa/
 ```
+
+Toujours uploader `index.html` et tout le dossier `assets/` depuis le meme
+build Vite. Sinon, le navigateur peut charger un nom de fichier JavaScript qui
+n'existe pas et afficher une page vide.
 
 ## 3. Uploader le backend
 
 Uploader:
 
 ```text
-api/      -> public_html/app/api/
-backend/  -> public_html/app/backend/
+api/      -> public_html/pwa/api/
+backend/  -> public_html/pwa/backend/
 ```
 
 Conserver `backend/.htaccess` pour bloquer l'acces web direct aux fichiers backend.
@@ -64,9 +68,9 @@ Puis modifier:
 'DB_NAME' => 'votre_base',
 'DB_USER' => 'votre_user',
 'DB_PASS' => 'votre_mot_de_passe',
-'APP_BASE_URL' => 'https://pilatesvitalite.ca/app',
+'APP_BASE_URL' => 'https://pilatesvitalite.webactiondemo.ca/pwa',
 'FINAL_DOMAIN' => 'https://pilatesvitalite.ca',
-'SOURCE_BASE_URL' => 'https://pilatesvitalite.ca',
+'SOURCE_BASE_URL' => 'https://pilatesvitalite.webactiondemo.ca',
 ```
 
 Pendant le developpement, les URLs peuvent rester sur:
@@ -82,7 +86,7 @@ Au lancement, remplacer les URLs `WATCH_URLS` par le domaine final.
 Option A, si Composer est disponible sur cPanel:
 
 ```bash
-cd public_html/app/backend
+cd public_html/pwa/backend
 composer install --no-dev --optimize-autoloader
 ```
 
@@ -102,7 +106,7 @@ backend/vendor/
 vers:
 
 ```text
-public_html/app/backend/vendor/
+public_html/pwa/backend/vendor/
 ```
 
 ## 7. Configurer les cles VAPID
@@ -120,32 +124,26 @@ Ajouter dans `backend/config/config.php`:
 Dans cPanel > Cron Jobs:
 
 ```bash
-/usr/local/bin/php /home/USER/public_html/app/backend/cron/check-updates.php
+/usr/local/bin/php /home/pilatesvitalite/domains/pilatesvitalite.webactiondemo.ca/public_html/pwa/backend/cron/check-updates.php
 ```
 
 Frequence recommandee:
 
 ```text
-*/15 * * * *
-```
-
-ou:
-
-```text
-*/30 * * * *
+*/10 * * * *
 ```
 
 ## 9. Tester les endpoints
 
 ```text
-https://pilatesvitalite.ca/app/api/config.php
-https://pilatesvitalite.ca/app/api/latest.php
+https://pilatesvitalite.webactiondemo.ca/pwa/api/config.php
+https://pilatesvitalite.webactiondemo.ca/pwa/api/latest.php
 ```
 
 ## 10. Tester une notification
 
 ```bash
-curl -X POST https://pilatesvitalite.ca/app/api/notify-test.php \
+curl -X POST https://pilatesvitalite.webactiondemo.ca/pwa/api/notify-test.php \
   -H "Content-Type: application/json" \
   -H "X-Notify-Test-Secret: VOTRE_SECRET" \
   -d '{"title":"Pilates Vitalite","message":"Test de notification"}'
@@ -156,7 +154,7 @@ curl -X POST https://pilatesvitalite.ca/app/api/notify-test.php \
 Executer une fois depuis le terminal cPanel si disponible:
 
 ```bash
-/usr/local/bin/php /home/USER/public_html/app/backend/cron/check-updates.php
+/usr/local/bin/php /home/pilatesvitalite/domains/pilatesvitalite.webactiondemo.ca/public_html/pwa/backend/cron/check-updates.php
 ```
 
 Verifier ensuite:
@@ -171,4 +169,3 @@ et les tables:
 content_snapshots
 notification_logs
 ```
-

@@ -38,5 +38,4 @@
 - [ ] `SOURCE_BASE_URL`, `WATCH_URLS`, `APP_BASE_URL` pointent vers le domaine final.
 - [ ] Les cles VAPID sont configurees.
 - [ ] `backend/.htaccess` protege le dossier backend.
-- [ ] Le cron cPanel tourne toutes les 15 ou 30 minutes.
-
+- [ ] Le cron cPanel tourne toutes les 10 minutes.

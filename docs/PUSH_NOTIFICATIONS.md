@@ -63,7 +63,7 @@ Body:
 {
   "title": "Pilates Vitalite",
   "message": "Notification test",
-  "url": "https://pilatesvitalite.ca/app/"
+  "url": "https://pilatesvitalite.webactiondemo.ca/pwa/"
 }
 ```
 
@@ -87,4 +87,3 @@ backend/vendor/
 ```
 
 sur cPanel.
-

@@ -6,7 +6,7 @@ return [
     'DB_USER' => 'cpanel_database_user',
     'DB_PASS' => 'cpanel_database_password',
 
-    'APP_BASE_URL' => 'https://pilatesvitalite.webactiondemo.ca/app',
+    'APP_BASE_URL' => 'https://pilatesvitalite.webactiondemo.ca/pwa',
     'FINAL_DOMAIN' => 'https://pilatesvitalite.ca',
     'SOURCE_BASE_URL' => 'https://pilatesvitalite.webactiondemo.ca',
 
@@ -29,4 +29,3 @@ return [
     'NOTIFY_ON_FIRST_RUN' => false,
     'ENABLE_PUSH_SEND' => true,
 ];
-
