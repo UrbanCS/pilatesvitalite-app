@@ -7,13 +7,15 @@ final class Scraper
     private array $urls;
     private string $sourceBaseUrl;
     private int $maxBlogItems;
+    private int $maxBlogPages;
     private int $maxShopPages;
 
     public function __construct(private readonly array $config, private readonly HttpClient $http)
     {
         $this->urls = $config['WATCH_URLS'] ?? [];
         $this->sourceBaseUrl = rtrim((string) ($config['SOURCE_BASE_URL'] ?? 'https://pilatesvitalite.webactiondemo.ca'), '/');
-        $this->maxBlogItems = (int) ($config['MAX_BLOG_ITEMS'] ?? 10);
+        $this->maxBlogItems = max(1, (int) ($config['MAX_BLOG_ITEMS'] ?? 50));
+        $this->maxBlogPages = max(1, (int) ($config['MAX_BLOG_PAGES'] ?? 10));
         $this->maxShopPages = max(1, (int) ($config['MAX_SHOP_PAGES'] ?? 10));
     }
 
@@ -26,7 +28,6 @@ final class Scraper
 
         $homeHtml = $this->http->get($homeUrl);
         $aboutHtml = $this->http->get($aboutUrl);
-        $blogHtml = $this->http->get($blogUrl);
         $contactHtml = $this->http->get($contactUrl);
 
         return [
@@ -42,7 +43,7 @@ final class Scraper
             'blog' => [
                 'title' => 'Blogue',
                 'sourceUrl' => $blogUrl,
-                'articles' => $this->parseBlogList($blogHtml, $blogUrl),
+                'articles' => $this->blogArticles($blogUrl),
             ],
             'contact' => $this->parseContact($contactHtml, $contactUrl),
         ];
@@ -53,11 +54,11 @@ final class Scraper
         $shopUrl = (string) ($this->urls['shop'] ?? $this->sourceBaseUrl . '/shop');
         $studioUrl = (string) ($this->urls['studio_shop'] ?? $this->studioShopUrl($shopUrl));
         $firstPageHtml = $this->http->get($studioUrl);
-        $pageCount = min($this->shopPageCount($firstPageHtml), $this->maxShopPages);
+        $pageCount = min($this->paginationPageCount($firstPageHtml), $this->maxShopPages);
         $courses = [];
 
         for ($page = 1; $page <= $pageCount; $page++) {
-            $pageUrl = $page === 1 ? $studioUrl : $this->shopPageUrl($studioUrl, $page);
+            $pageUrl = $page === 1 ? $studioUrl : $this->paginationPageUrl($studioUrl, $page);
             $html = $page === 1 ? $firstPageHtml : $this->http->get($pageUrl);
 
             foreach ($this->parseCourseItems($html, $pageUrl) as $item) {
@@ -112,10 +113,10 @@ final class Scraper
         return $nextCourse;
     }
 
-    public function watchedItems(): array
+    public function watchedItems(?array $latest = null): array
     {
         return array_merge(
-            $this->itemsFromLatest($this->latest()),
+            $this->itemsFromLatest($latest ?? $this->latest()),
             $this->courseItems(),
             $this->packageItems()
         );
@@ -167,7 +168,7 @@ final class Scraper
                 'source_url' => $article['url'],
                 'content_hash' => app_json_hash([
                     'title' => $article['title'],
-                    'date' => $article['date'] ?? null,
+                    'date' => app_date_hash_value($article['date'] ?? null),
                     'excerpt' => $article['excerpt'] ?? null,
                     'content' => $article['content'] ?? null,
                 ]),
@@ -186,11 +187,11 @@ final class Scraper
     {
         $shopUrl = (string) ($this->urls['shop'] ?? $this->sourceBaseUrl . '/shop');
         $firstPageHtml = $this->http->get($shopUrl);
-        $pageCount = min($this->shopPageCount($firstPageHtml), $this->maxShopPages);
+        $pageCount = min($this->paginationPageCount($firstPageHtml), $this->maxShopPages);
         $items = [];
 
         for ($page = 1; $page <= $pageCount; $page++) {
-            $pageUrl = $page === 1 ? $shopUrl : $this->shopPageUrl($shopUrl, $page);
+            $pageUrl = $page === 1 ? $shopUrl : $this->paginationPageUrl($shopUrl, $page);
             $html = $page === 1 ? $firstPageHtml : $this->http->get($pageUrl);
 
             foreach ($this->parseCourseItems($html, $pageUrl) as $item) {
@@ -351,7 +352,7 @@ final class Scraper
             : strcmp((string) $candidate['id'], (string) $current['id']) < 0;
     }
 
-    private function shopPageCount(string $html): int
+    private function paginationPageCount(string $html): int
     {
         $xpath = $this->xpath($html);
         $pageCount = 1;
@@ -372,13 +373,13 @@ final class Scraper
         return max(1, $pageCount);
     }
 
-    private function shopPageUrl(string $shopUrl, int $page): string
+    private function paginationPageUrl(string $baseUrl, int $page): string
     {
-        if (preg_match('/([?&])page=\d+/i', $shopUrl)) {
-            return preg_replace('/([?&])page=\d+/i', '$1page=' . $page, $shopUrl, 1) ?? $shopUrl;
+        if (preg_match('/([?&])page=\d+/i', $baseUrl)) {
+            return preg_replace('/([?&])page=\d+/i', '$1page=' . $page, $baseUrl, 1) ?? $baseUrl;
         }
 
-        return $shopUrl . (str_contains($shopUrl, '?') ? '&' : '?') . 'page=' . $page;
+        return $baseUrl . (str_contains($baseUrl, '?') ? '&' : '?') . 'page=' . $page;
     }
 
     private function packageItems(): array
@@ -539,6 +540,43 @@ final class Scraper
         ];
     }
 
+    private function blogArticles(string $blogUrl): array
+    {
+        $firstPageHtml = $this->http->get($blogUrl);
+        $pageCount = min($this->paginationPageCount($firstPageHtml), $this->maxBlogPages);
+        $articlesById = [];
+
+        for ($page = 1; $page <= $pageCount; $page++) {
+            $pageUrl = $page === 1 ? $blogUrl : $this->paginationPageUrl($blogUrl, $page);
+            $html = $page === 1 ? $firstPageHtml : $this->http->get($pageUrl);
+
+            foreach ($this->parseBlogList($html, $pageUrl) as $article) {
+                $articleId = (string) ($article['id'] ?? '');
+                if ($articleId !== '' && !isset($articlesById[$articleId])) {
+                    $articlesById[$articleId] = $article;
+                }
+            }
+        }
+
+        $articles = array_values($articlesById);
+        $this->sortBlogArticles($articles);
+        $articles = array_slice($articles, 0, $this->maxBlogItems);
+
+        foreach ($articles as &$article) {
+            $detail = $this->parseArticleDetailSafe((string) $article['url']);
+            $article['title'] = $detail['title'] ?: $article['title'];
+            $article['date'] = $article['date'] ?: ($detail['date'] ?? '');
+            $article['excerpt'] = $detail['excerpt'] ?? '';
+            $article['imageUrl'] = $detail['imageUrl'] ?: $article['imageUrl'];
+            $article['content'] = $detail['content'] ?? '';
+        }
+        unset($article);
+
+        $this->sortBlogArticles($articles);
+
+        return $articles;
+    }
+
     private function parseBlogList(string $html, string $url): array
     {
         $xpath = $this->xpath($html);
@@ -549,10 +587,6 @@ final class Scraper
         $seen = [];
 
         foreach ($cards ?: [] as $card) {
-            if (count($articles) >= $this->maxBlogItems) {
-                break;
-            }
-
             $linkNode = $this->first($xpath, ".//a[contains(@href, '/blog/') and contains(@class, 'title')]", $card)
                 ?? $this->first($xpath, ".//a[contains(@href, '/blog/')]", $card);
 
@@ -569,19 +603,23 @@ final class Scraper
 
             $imageNode = $this->first($xpath, ".//img[@src and not(contains(@src, 'clock')) and not(contains(@src, 'massage'))]", $card);
             $date = $this->extractDate($this->text($card));
-            $detail = $this->parseArticleDetailSafe($href);
 
             $articles[] = [
                 'id' => app_slug_from_url($href),
-                'title' => $detail['title'] ?: $title,
+                'title' => $title,
                 'url' => $href,
-                'date' => $date ?: ($detail['date'] ?? ''),
-                'excerpt' => $detail['excerpt'] ?? '',
-                'imageUrl' => $detail['imageUrl'] ?: $this->src($imageNode, $url),
-                'content' => $detail['content'] ?? '',
+                'date' => $date,
+                'excerpt' => '',
+                'imageUrl' => $this->src($imageNode, $url),
+                'content' => '',
             ];
         }
 
+        return $articles;
+    }
+
+    private function sortBlogArticles(array &$articles): void
+    {
         usort($articles, static function (array $left, array $right): int {
             $dateComparison = app_date_sort_key($right['date'] ?? null) <=> app_date_sort_key($left['date'] ?? null);
 
@@ -589,23 +627,20 @@ final class Scraper
                 ? $dateComparison
                 : strcmp((string) ($left['id'] ?? ''), (string) ($right['id'] ?? ''));
         });
-
-        return $articles;
     }
 
     private function parseArticleDetailSafe(string $url): array
     {
-        try {
-            return $this->parseArticleDetail($this->http->get($url), $url);
-        } catch (Throwable) {
-            return [
-                'title' => '',
-                'date' => '',
-                'excerpt' => '',
-                'imageUrl' => '',
-                'content' => '',
-            ];
+        $detail = $this->parseArticleDetail($this->http->get($url), $url);
+        foreach (['title', 'content'] as $requiredField) {
+            if (trim((string) ($detail[$requiredField] ?? '')) === '') {
+                throw new RuntimeException(
+                    "Incomplete blog article detail ({$requiredField}) at {$url}."
+                );
+            }
         }
+
+        return $detail;
     }
 
     private function parseArticleDetail(string $html, string $url): array

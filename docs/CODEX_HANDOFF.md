@@ -6,6 +6,40 @@ Ce fichier est la source de contexte principale pour tout nouveau chat Codex.
 Il documente les decisions prises, l'etat connu du projet, le deploiement cPanel
 et les tests effectues. Les secrets ne sont volontairement pas inclus.
 
+## Etat courant apres la migration du blogue
+
+Le 2026-08-03, les 28 articles publies de l'ancien WordPress
+`https://pilatesvitalite.ca/blogue/` ont ete copies dans le nouveau site
+Laravel `https://pilatesvitalite.webactiondemo.ca/blogs`. Les medias sont
+maintenant locaux au nouveau site, l'ordre chronologique et le slug
+`la-sante-osseuse-pas-quune-affaire-de-femmes` ont ete corriges, et les trois
+articles les plus recents sont disponibles pour l'accueil. Les dates publiques
+du blogue sont affichees en francais et la mention d'auteur a ete retiree des
+fiches d'article.
+
+L'accueil actif utilise `home-1.blade.php`, qui rend ses cartes avec
+`resources/views/components/website/blog-item.blade.php`. Cette derniere
+occurrence a ete corrigee le 2026-08-03; l'accueil affiche maintenant
+`07 juin 2023`, `20 avril 2023` et `22 mars 2023`.
+
+La PWA reste volontairement synchronisee avec le domaine de demonstration.
+Son API expose les 28 articles et le cron surveille maintenant 55 elements au
+total. L'amorcage a ete fait sans push; les journaux de notification sont
+restes a 3 et les 5 abonnements actifs sont intacts. Le cron est reactive avec
+une seule entree toutes les 10 minutes.
+
+Le 2026-08-03, `latest.php` a ete accelere avec un cache JSON serveur atomique
+alimente par ce meme cron. Cinq mesures apres prechauffage donnent de 0,067 a
+0,103 seconde au total, contre 4,56 a 5,17 secondes auparavant. Le cache a un
+TTL dur de 1 200 secondes: une entree expiree declenche la lecture live et ne
+peut donc pas masquer indefiniment un cron arrete.
+
+Rapport detaille, sauvegardes et procedure de basculement:
+
+```text
+docs/BLOG_MIGRATION_20260803.md
+```
+
 ## 1. Objectif du produit
 
 Construire une PWA legere pour Pilates Vitalite, sans application native et
@@ -86,9 +120,12 @@ Le cron calcule un hash pour:
 
 Etat des sources additionnelles valide le 2026-08-03:
 
+- 28 articles uniques sous `/blogs`, tries du plus recent au plus ancien;
 - 18 produits/cours uniques sous `/shop`;
 - 3 forfaits uniques sous `/membership`;
 - 4 campagnes infolettre envoyees dans `newsletter_campaigns`.
+
+Avec Accueil et A propos, le cron traite 55 elements au total.
 
 Les campagnes ne sont pas exposees par une archive HTML publique. Le cron lit
 donc uniquement les colonnes `id`, `subject`, `status`, `sent_at` et
@@ -99,6 +136,9 @@ valeurs sensibles ne sont ni retournees par l'API ni ecrites dans les logs.
 
 Le premier passage cree les snapshots sans envoyer de notification lorsque
 `NOTIFY_ON_FIRST_RUN` vaut `false`. Les hashes et journaux evitent les doublons.
+Pour le blogue, la date utilisee dans le hash est normalisee en `YYYY-MM-DD`:
+une traduction d'affichage comme `07 June, 2023` vers `07 juin 2023` ne doit
+plus produire une fausse modification.
 
 Le cron extrait aussi les variantes publiees dans les fiches de la categorie
 `en-studio` et ecrit le prochain cours disponible dans
@@ -148,6 +188,11 @@ conserve `site.fullSiteUrl=https://pilatesvitalite.webactiondemo.ca`.
 les methodes non permises. L'acces web direct a
 `backend/config/config.php` retourne HTTP 403.
 
+Apres la migration du blogue, `latest.php` retourne 28 articles, avec
+`cours-virtuel-pilates-pour-tous` en premier. La reponse normale est maintenant
+`source=cache`; `source=live` n'apparait que lors d'un remplissage ou d'un
+rafraichissement apres expiration.
+
 ## 6. Emplacement DirectAdmin/cPanel reel
 
 L'hebergement est administre avec l'interface DirectAdmin Evolution. Le terme
@@ -158,6 +203,12 @@ Le dossier correct est directement sous `public_html`:
 
 ```text
 /home/pilatesvitalite/domains/pilatesvitalite.webactiondemo.ca/public_html/pwa/
+```
+
+La racine du site Laravel qui contient le blogue est:
+
+```text
+/home/pilatesvitalite/domains/pilatesvitalite.webactiondemo.ca/public_html/
 ```
 
 Ce chemin est important. Une tentative precedente dans
@@ -192,6 +243,28 @@ Sauvegardes creees avant la mise a niveau de l'accueil et du prochain cours:
 Serveur: /home/pilatesvitalite/codex-backups/pwa-home-upgrade-20260803-172534
 Local:   C:\Users\marca\Downloads\pilatesvitalite-app\pilatesvitalite-app-before-home-course-login-20260803-172534.zip
 ```
+
+Sauvegarde creee avant la migration des 28 articles WordPress:
+
+```text
+Serveur: /home/pilatesvitalite/codex-backups/blog-import-20260804-014508-576bbd15
+Outils:  /home/pilatesvitalite/codex-backups/blog-import-20260804-014508-576bbd15/migration-tools
+```
+
+Sauvegarde creee avant la traduction du blogue et l'optimisation PWA:
+
+```text
+Serveur: /home/pilatesvitalite/codex-backups/blog-ui-pwa-perf-20260803-225319
+```
+
+Elle contient les vues et fichiers PWA precedents, les trois journaux de
+validation et une sauvegarde JSON privee des lignes du faux positif de test
+avant leur retrait controle.
+
+Les outils et archives temporaires ont ete retires de `public_html` apres la
+validation. Le manifest d'import est conserve sous
+`storage/app/imports/wordpress-blog-20260804-015754-2fd3c382.json` dans la
+racine Laravel.
 
 Archive finale de deploiement:
 
@@ -300,9 +373,20 @@ Fichier ajoute par la mise a niveau de l'accueil:
 backend/lib/NextCourseCache.php
 ```
 
+Fichier ajoute par l'optimisation du chargement:
+
+```text
+backend/lib/LatestContentCache.php
+```
+
+Le cron ecrit atomiquement `backend/storage/latest-content.json` apres chaque
+extraction complete reussie. `api/latest.php` sert ce fichier tant qu'il a
+moins de 1 200 secondes; sinon il refait une extraction live et remplit le
+cache. Le service worker continue volontairement d'exclure `/api/`.
+
 Le cron actualise ce cache toutes les 10 minutes. Une erreur d'extraction
-conserve le dernier cache valide et n'interrompt pas la surveillance des 28
-contenus existants.
+conserve le dernier cache valide et n'interrompt pas la surveillance des 55
+elements actuels, dont 28 articles de blogue.
 
 La migration SQL est appliquee avec phpMyAdmin ou le terminal avant le nouveau
 backend. Ne jamais uploader ou reimporter `database/schema.sql` dans une base
@@ -390,12 +474,18 @@ Valeurs importantes:
 - `CRON_SECRET` et `NOTIFY_TEST_SECRET`.
 - `NOTIFY_ON_FIRST_RUN`: normalement `false`.
 - `ENABLE_PUSH_SEND`: normalement `true`.
+- `MAX_BLOG_ITEMS`: `50`, pour couvrir les 28 articles actuels.
+- `MAX_BLOG_PAGES`: `10`, pour parcourir toute la pagination.
+- `LATEST_CONTENT_CACHE_MAX_AGE`: `1200`; cette valeur a aussi un defaut dans
+  le code afin de ne pas imposer une modification du `config.php` prive.
+- `BLOG_BASELINE_MODE`: `false` en fonctionnement normal; ne l'activer que
+  temporairement pour un amorcage silencieux controle.
 
 ## 11. Cron DirectAdmin/cPanel
 
 Frequence configuree: toutes les 10 minutes.
 
-Etat final confirme le 2026-08-03:
+Etat historique confirme avant la migration du blogue le 2026-08-03:
 
 ```text
 ACTIVE_PWA=1
@@ -420,13 +510,35 @@ Commande live:
 /usr/local/bin/php /home/pilatesvitalite/domains/pilatesvitalite.webactiondemo.ca/public_html/pwa/backend/cron/check-updates.php >> /dev/null 2>&1
 ```
 
+Etat courant apres traduction du blogue et optimisation PWA, confirme a
+23:02:59 le 2026-08-03:
+
+```text
+crontab: une entree PWA correspondante
+blog_distinct_items=28
+notification_logs.total=3
+notification_logs.latest_id=3
+active_subscriptions=5
+changed=0 notifications=0 items=55
+passage automatique 22:20:08: changed=0 notifications=0 items=55
+passage manuel final 22:28:31: changed=0 notifications=0 items=55
+amorcage silencieux des dates normalisees 23:02:35:
+changed=28 notifications=0 items=55
+passage normal 23:02:59: changed=0 notifications=0 items=55
+passage automatique 23:10:07: changed=0 notifications=0 items=55
+passage manuel apres correction de l'accueil 23:25:05:
+changed=0 notifications=0 items=55
+cache_articles=28
+```
+
 Commande manuelle avec sortie visible:
 
 ```bash
 /usr/local/bin/php /home/pilatesvitalite/domains/pilatesvitalite.webactiondemo.ca/public_html/pwa/backend/cron/check-updates.php
 ```
 
-Sortie stable validee au second passage du deploiement 2026-08-03:
+Sortie historique stable, validee avant la migration du blogue au second
+passage du deploiement 2026-08-03:
 
 ```text
 Unchanged: home/home
@@ -450,6 +562,18 @@ snapshot historique. La formule historique a ete retablie et le snapshot
 transitoire a ete retire. Le second passage a confirme
 `changed=0 notifications=0 items=28`, sans nouvel envoi. Ne pas elargir une
 formule de hash existante sans plan de migration des snapshots.
+
+Lors du premier controle manuel apres traduction des dates, avant l'ajout de
+la normalisation, les 28 dates en francais ont ete prises pour des
+modifications. Le service push a accepte 112 envois (4 abonnements x 28). Le
+cron etait suspendu et n'a pas pu repeter le probleme. Les 28 journaux et 28
+snapshots techniques ont ete sauvegardes puis retires dans une transaction,
+l'abonnement invalide desactive pendant ce passage a ete restaure, et les
+compteurs sont revenus a `notification_logs.total=3`, `latest_id=3` et
+`active_subscriptions=5`. Les dates des hashes sont maintenant normalisees en
+`YYYY-MM-DD`; le passage silencieux puis le passage normal a `changed=0` ont
+confirme la correction. Les notifications deja remises ne peuvent pas etre
+rappelees.
 
 ## 12. Notifications Web Push
 
@@ -553,6 +677,19 @@ Passage automatique 17:40:03: changed=0 notifications=0 items=28
 Cron reactive: ACTIVE_PWA=1, crontab de 5 lignes
 ```
 
+Validation de la migration des 28 articles, plus tard le 2026-08-03:
+
+```text
+Audit Laravel: 16/16 controles reussis
+Amorcage blogue: changed=28 notifications=0 items=55
+Passage stable avec amorcage: changed=0 notifications=0 items=55
+Passages normaux apres desactivation: changed=0 notifications=0 items=55
+API PWA: 28 articles, source=live, plus recent en premier
+Cron reactive: une entree PWA, toutes les 10 minutes
+Passage automatique 22:20:08: changed=0 notifications=0 items=55
+Passage manuel final 22:28:31: changed=0 notifications=0 items=55
+```
+
 Incident connu du premier passage:
 
 ```text
@@ -615,7 +752,11 @@ Quand `https://pilatesvitalite.ca/` sera lance:
 4. Conserver les memes cles VAPID si l'on souhaite maintenir la configuration,
    mais les abonnements push sont lies a l'origine web. Un changement de domaine
    exigera normalement une nouvelle inscription des utilisateurs.
-5. Refaire les tests API, abonnement, notification test et cron.
+5. Activer les redirections de `/blogue/{ancien-slug}/` vers `/blog/{slug}` a
+   partir du manifest d'import Laravel.
+6. Amorcer silencieusement les nouveaux snapshots, puis confirmer deux
+   passages `changed=0 notifications=0` avant de reactiver le cron.
+7. Refaire les tests API, abonnement, notification test et cron.
 
 ## 17. Commandes de verification locale
 
@@ -633,6 +774,7 @@ PHP, selon l'environnement:
 php -l api/subscribe.php
 php -l api/preferences.php
 php -l backend/lib/Scraper.php
+php -l backend/lib/bootstrap.php
 php -l backend/lib/SourceNewsletterRepository.php
 php -l backend/cron/check-updates.php
 ```

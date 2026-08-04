@@ -53,7 +53,7 @@ export interface ContactContent {
 
 export interface LatestResponse {
   ok: boolean;
-  source: 'live' | 'database';
+  source: 'live' | 'cache' | 'database';
   fetchedAt: string;
   site: {
     name: string;

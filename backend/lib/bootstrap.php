@@ -18,6 +18,7 @@ require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/HttpClient.php';
 require_once __DIR__ . '/NotificationPreferences.php';
 require_once __DIR__ . '/NextCourseCache.php';
+require_once __DIR__ . '/LatestContentCache.php';
 require_once __DIR__ . '/Scraper.php';
 require_once __DIR__ . '/SourceNewsletterRepository.php';
 require_once __DIR__ . '/SnapshotRepository.php';
@@ -124,7 +125,26 @@ function app_date_sort_key(?string $value): int
         ],
         $value
     );
+    // The website renders dates such as "07 June, 2023". strtotime() treats
+    // the trailing four digits after the comma as a time (20:23) and silently
+    // supplies the current year, so parse the known display formats first.
+    foreach (['!Y-m-d', '!j F, Y', '!j F Y', '!F j, Y'] as $format) {
+        $date = DateTimeImmutable::createFromFormat($format, $normalized);
+        $errors = DateTimeImmutable::getLastErrors();
+
+        if ($date !== false && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
+            return $date->getTimestamp();
+        }
+    }
+
     $timestamp = strtotime($normalized);
 
     return $timestamp === false ? 0 : $timestamp;
+}
+
+function app_date_hash_value(?string $value): string
+{
+    $timestamp = app_date_sort_key($value);
+
+    return $timestamp > 0 ? date('Y-m-d', $timestamp) : trim((string) $value);
 }

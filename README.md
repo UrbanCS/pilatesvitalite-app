@@ -29,7 +29,10 @@ docs/                     Guides cPanel, push, checklist
 
 - PWA installable avec manifest, service worker, cache minimal et icone.
 - Navigation mobile: Accueil, Blogue, A propos, Contact.
-- Lecture live des pages publiques via `/api/latest.php`.
+- Lecture des pages publiques par le cron, avec cache JSON serveur atomique
+  servi par `/api/latest.php` et repli live si le cache expire.
+- Lecture paginee des 28 articles importes dans le nouveau site Laravel, avec
+  le plus recent affiche en premier.
 - Abonnement/desabonnement Web Push via `/api/subscribe.php` et `/api/unsubscribe.php`.
 - Notification test protegee via `/api/notify-test.php`.
 - Cron `/backend/cron/check-updates.php` avec detection de changements par hash.
@@ -79,6 +82,16 @@ Commande cPanel actuellement utilisee:
 
 Frequence configuree: toutes les 10 minutes. Le premier passage initialise les snapshots sans envoyer de notifications, sauf si `NOTIFY_ON_FIRST_RUN` est mis a `true`.
 
+Etat valide apres la migration du blogue le 2026-08-03:
+`changed=0 notifications=0 items=55`. La source active demeure
+`https://pilatesvitalite.webactiondemo.ca` jusqu'au basculement explicite du
+nouveau site vers `https://pilatesvitalite.ca`.
+
+Le cache `backend/storage/latest-content.json` est rafraichi par le cron toutes
+les 10 minutes et expire apres 20 minutes. Le 2026-08-03, cinq mesures de
+`/api/latest.php` apres prechauffage ont donne de 0,067 a 0,103 seconde, contre
+4,56 a 5,17 secondes avant l'optimisation.
+
 ## Securite
 
 - Ne jamais exposer `backend/config/config.php`.
@@ -94,3 +107,4 @@ Frequence configuree: toutes les 10 minutes. Le premier passage initialise les s
 - [Audit technique](docs/AUDIT.md)
 - [Checklist finale](docs/TEST_CHECKLIST.md)
 - [Passation Codex](docs/CODEX_HANDOFF.md)
+- [Migration des 28 articles WordPress](docs/BLOG_MIGRATION_20260803.md)
