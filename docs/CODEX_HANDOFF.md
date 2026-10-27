@@ -1,6 +1,6 @@
 # Passation Codex - Pilates Vitalite PWA
 
-Derniere mise a jour de cette passation: 2026-08-03.
+Derniere mise a jour de cette passation: 2026-08-13.
 
 Ce fichier est la source de contexte principale pour tout nouveau chat Codex.
 Il documente les decisions prises, l'etat connu du projet, le deploiement cPanel
@@ -38,6 +38,36 @@ Rapport detaille, sauvegardes et procedure de basculement:
 
 ```text
 docs/BLOG_MIGRATION_20260803.md
+```
+
+## Etat courant du module Infolettre
+
+Le 2026-08-13, le module Laravel `Modules/NewsLetter` du site de demonstration
+a ete remis en etat dans DirectAdmin/cPanel. Un modele reutilisable nomme
+`Infolettre Pilates Vitalite — modele principal` reprend les couleurs, le logo
+et les images du nouveau site. Il contient des blocs faciles a remplacer pour
+les annonces, cours et forfaits, formations, dates importantes et temoignage.
+
+Deux listes de diffusion ont ete creees: `Membres en studio` et `Membres en
+ligne`. L'interface permet maintenant d'importer les comptes membres du site,
+ignore les doublons et ne reactive jamais automatiquement une adresse
+desabonnee ou non verifiee. Les huit comptes de test n'ont pas ete importes;
+le seul membre reel identifiable a ete ajoute a `Membres en studio`.
+
+L'edition et la suppression des modeles ont ete reparees. Les courriels
+n'ajoutent plus l'ancien en-tete et pied de page statiques. Chaque destinataire
+recoit un lien de desabonnement unique, et les liens/images relatifs de
+l'editeur sont convertis en URL absolues au moment de l'envoi. Le domaine actif
+reste `https://pilatesvitalite.webactiondemo.ca/`; `APP_URL` et les contenus
+devront etre controles lors du basculement final vers
+`https://pilatesvitalite.ca/`.
+
+Aucun courriel reel n'a ete envoye pendant les tests. Un rendu interne a
+confirme le pied de page de desabonnement. Une sauvegarde du module avant
+intervention est disponible sur le serveur:
+
+```text
+/home/pilatesvitalite/domains/pilatesvitalite.webactiondemo.ca/public_html/Modules/NewsLetter-before-codex-20260813.zip
 ```
 
 ## 1. Objectif du produit
