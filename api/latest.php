@@ -6,11 +6,27 @@ require_once __DIR__ . '/../backend/lib/bootstrap.php';
 
 $config = app_config();
 $nextCourseCache = new NextCourseCache();
+$latestContentCache = new LatestContentCache();
+$latestContentCacheMaxAge = max(60, (int) app_config('LATEST_CONTENT_CACHE_MAX_AGE', 1200));
+
+$cached = $latestContentCache->read($latestContentCacheMaxAge);
+if ($cached !== null) {
+    $cached['nextCourse'] = $nextCourseCache->read();
+    $cached['ok'] = true;
+    $cached['source'] = 'cache';
+
+    Response::json($cached);
+}
 
 try {
     $http = new HttpClient((int) app_config('HTTP_TIMEOUT', 15));
     $scraper = new Scraper($config, $http);
     $latest = $scraper->latest();
+    try {
+        $latestContentCache->write($latest);
+    } catch (Throwable) {
+        // A cache write failure must not hide otherwise valid live content.
+    }
     $latest['nextCourse'] = $nextCourseCache->read();
     $latest['ok'] = true;
     $latest['source'] = 'live';

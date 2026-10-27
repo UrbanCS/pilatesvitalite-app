@@ -132,6 +132,11 @@ try {
     cron_log_line('Starting content check.');
 
     $config = app_config();
+    $blogBaselineMode = (bool) ($config['BLOG_BASELINE_MODE'] ?? false);
+    if ($blogBaselineMode) {
+        cron_log_line('Blog baseline mode enabled: blog snapshots will be saved without notifications.');
+    }
+
     $database = new Database($config);
     $repository = new SnapshotRepository($database);
     $http = new HttpClient((int) app_config('HTTP_TIMEOUT', 15));
@@ -152,7 +157,18 @@ try {
         cron_log_line('Next course cache warning: ' . $nextCourseError->getMessage());
     }
 
-    $items = $scraper->watchedItems();
+    $latest = $scraper->latest();
+    try {
+        (new LatestContentCache())->write($latest);
+        cron_log_line(sprintf(
+            'Latest-content cache refreshed: articles=%d.',
+            count($latest['blog']['articles'] ?? [])
+        ));
+    } catch (Throwable $cacheError) {
+        cron_log_line('Latest-content cache warning: ' . $cacheError->getMessage());
+    }
+
+    $items = $scraper->watchedItems($latest);
     try {
         $newsletterItems = (new SourceNewsletterRepository($config))->sentCampaignItems();
         $items = array_merge($items, $newsletterItems);
@@ -188,10 +204,11 @@ try {
         $isNew = $previous === null;
         $isInitialBootstrap = $previous === null && (($initialCounts[$section] ?? 0) === 0) && !app_config('NOTIFY_ON_FIRST_RUN', false);
         $onlyNotifyWhenNew = in_array($section, ['course', 'package', 'newsletter'], true);
-        $shouldNotify = !$isInitialBootstrap && (!$onlyNotifyWhenNew || $isNew);
+        $isBlogBaseline = $blogBaselineMode && $section === 'blog';
+        $shouldNotify = !$isBlogBaseline && !$isInitialBootstrap && (!$onlyNotifyWhenNew || $isNew);
 
         if (!$shouldNotify) {
-            $reason = $isInitialBootstrap ? 'initial' : 'update ignored';
+            $reason = $isBlogBaseline ? 'blog baseline' : ($isInitialBootstrap ? 'initial' : 'update ignored');
             cron_log_line(sprintf('Snapshot saved without notification (%s): %s/%s', $reason, $section, $itemKey));
             continue;
         }

@@ -28,9 +28,12 @@ return [
     ],
 
     'HTTP_TIMEOUT' => 15,
-    'MAX_BLOG_ITEMS' => 10,
+    'MAX_BLOG_ITEMS' => 50,
+    'MAX_BLOG_PAGES' => 10,
     'MAX_SHOP_PAGES' => 10,
     'MAX_NEWSLETTER_ITEMS' => 500,
+    'LATEST_CONTENT_CACHE_MAX_AGE' => 1200,
+    'BLOG_BASELINE_MODE' => false,
     'NOTIFY_ON_FIRST_RUN' => false,
     'ENABLE_PUSH_SEND' => true,
 ];

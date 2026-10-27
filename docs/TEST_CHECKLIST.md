@@ -12,6 +12,8 @@
   et `newsletter`.
 - [x] L'accueil affiche `Prochain cours`, `Tous les cours`, `Compte client`
   et une seule `Derniere nouvelle`.
+- [x] Les dates du blogue sont en francais sur les listes, l'accueil et les
+  fiches; aucune mention d'auteur n'est affichee sur une fiche.
 - [x] En l'absence de seance studio future, l'etat vide est visible sans
   afficher une ancienne seance ni inventer une heure.
 - [x] Le service worker utilise `pilates-vitalite-shell-v20260803-2` et ne
@@ -38,8 +40,21 @@
   `contact`, ainsi que la cle nullable `nextCourse`.
 - [x] `/api/latest.php` conserve
   `site.fullSiteUrl=https://pilatesvitalite.webactiondemo.ca`.
+- [x] `/api/latest.php` retourne les 28 articles, avec
+  `cours-virtuel-pilates-pour-tous` en premier et `source=cache` apres
+  prechauffage.
+- [x] Cinq appels apres prechauffage prennent de 0,067 a 0,103 seconde au
+  total, contre 4,56 a 5,17 secondes avant le cache serveur.
+- [x] Le cache valide, le JSON corrompu et le cache expire ont ete testes; un
+  cache expire de plus de 1 200 secondes est refuse.
 - [x] `/api/preferences.php` est deploye et refuse les methodes non permises.
 - [x] `backend/config/config.php` retourne HTTP 403 en acces web.
+- [x] Les 28 articles WordPress sont importes dans Laravel, sur 4 pages de
+  9, 9, 9 et 1 article.
+- [x] Les images et MP3 importes sont locaux; aucun lien
+  `wp-content/uploads` ne reste dans les contenus.
+- [x] Le slug `la-sante-osseuse-pas-quune-affaire-de-femmes` est canonique.
+- [x] L'audit de migration Laravel reussit 16 controles sur 16.
 - [ ] `/api/subscribe.php` sauvegarde un abonnement et ses preferences sur un
   appareil de test.
 - [ ] `/api/preferences.php` relit et modifie les quatre choix sur cet appareil.
@@ -66,6 +81,31 @@
 - [x] Le passage automatique de 16:50:02 le 2026-08-03 retourne
   `changed=0 notifications=0 items=28`.
 - [x] Le cron PWA est actif: `ACTIVE_PWA=1` et crontab de 5 lignes.
+- [x] Apres la migration, l'amorcage silencieux retourne
+  `changed=28 notifications=0 items=55`, puis
+  `changed=0 notifications=0 items=55`.
+- [x] Avec `BLOG_BASELINE_MODE=false`, deux passages manuels normaux retournent
+  `changed=0 notifications=0 items=55`.
+- [x] Apres correction du parseur de dates, le plus recent article est en
+  premier et le cron demeure a `changed=0 notifications=0 items=55`.
+- [x] Les compteurs restent inchanges: 3 journaux de notification,
+  `latest_id=3` et 5 abonnements actifs.
+- [x] Le cron PWA est reactive avec exactement une entree toutes les
+  10 minutes.
+- [x] Le premier passage automatique apres reactivation, a 22:20:08, retourne
+  `changed=0 notifications=0 items=55`.
+- [x] Le passage manuel final apres les correctifs de robustesse, a 22:28:31,
+  retourne `changed=0 notifications=0 items=55`.
+- [x] Les dates utilisees dans les hashes sont normalisees en `YYYY-MM-DD`;
+  `07 June, 2023` et `07 juin 2023` donnent la meme valeur.
+- [x] L'amorcage silencieux de 23:02:35 retourne
+  `changed=28 notifications=0 items=55`, puis le passage normal de 23:02:59
+  retourne `changed=0 notifications=0 items=55`.
+- [x] Le premier passage automatique apres reactivation, a 23:10:07, retourne
+  `changed=0 notifications=0 items=55` et conserve les compteurs.
+- [x] Apres traduction du composant partage `blog-item.blade.php` utilise par
+  `home-1`, l'accueil affiche les trois dates en francais et le passage manuel
+  de 23:25:05 reste a `changed=0 notifications=0 items=55`.
 - [x] Les logs sont ecrits dans `backend/storage/logs/`.
 - [ ] Ajouter un cours de test autorise et confirmer qu'un seul avis
   `offers` est envoye aux abonnes ayant active cette categorie.
@@ -98,6 +138,17 @@
   `3207A9D8F19E3D1CF04382857799BD6FCDE8DE5A4411FA92C57B907ACB060B8E`.
 - [x] L'archive finale v3 est aussi staging sous
   `/home/pilatesvitalite/codex-staging/pwa-notification-upgrade-20260803/`.
+- [x] Sauvegarde avant import des articles disponible sous
+  `/home/pilatesvitalite/codex-backups/blog-import-20260804-014508-576bbd15`.
+- [x] Sauvegarde avant traduction et optimisation disponible sous
+  `/home/pilatesvitalite/codex-backups/blog-ui-pwa-perf-20260803-225319`, avec
+  fichiers precedents, journaux de validation et sauvegarde corrective privee.
+- [x] Les outils et archives de migration sont archives dans le sous-dossier
+  prive `migration-tools/`; aucun artefact `codex-*` ni dossier `ops` ne reste
+  dans `public_html`.
+- [x] La source active demeure
+  `https://pilatesvitalite.webactiondemo.ca`; aucune URL n'a ete basculee vers
+  le domaine final.
 - [ ] Au lancement final, basculer separement vers
   `https://pilatesvitalite.ca` et refaire l'inscription Web Push des
   utilisateurs.
@@ -112,3 +163,11 @@
   transitoire retire.
 - [x] Confirmer qu'aucun nouvel envoi ne s'est produit aux passages manuel et
   automatique suivants.
+- [x] Documenter le faux positif du premier controle apres traduction des
+  dates: 28 notifications journalisees et 112 envois acceptes par le service
+  push; les notifications deja remises ne peuvent pas etre rappelees.
+- [x] Sauvegarder puis retirer en transaction uniquement les 28 journaux et 28
+  snapshots du faux positif, et restaurer l'abonnement desactive pendant ce
+  passage.
+- [x] Confirmer le retour a `notification_logs=3`, `latest_id=3`, 5 abonnements
+  actifs et un passage normal `changed=0 notifications=0 items=55`.

@@ -5,6 +5,8 @@ Etat deploye le 2026-08-03:
 - source active: `https://pilatesvitalite.webactiondemo.ca`;
 - domaine final futur: `https://pilatesvitalite.ca`;
 - panneau reel: DirectAdmin Evolution;
+- racine du site Laravel:
+  `/home/pilatesvitalite/domains/pilatesvitalite.webactiondemo.ca/public_html/`;
 - racine PWA:
   `/home/pilatesvitalite/domains/pilatesvitalite.webactiondemo.ca/public_html/pwa/`.
 
@@ -24,6 +26,25 @@ Sauvegardes de la mise a niveau de l'accueil:
 Serveur: /home/pilatesvitalite/codex-backups/pwa-home-upgrade-20260803-172534
 Local:   C:\Users\marca\Downloads\pilatesvitalite-app\pilatesvitalite-app-before-home-course-login-20260803-172534.zip
 ```
+
+Sauvegarde de la migration des 28 articles WordPress:
+
+```text
+Serveur: /home/pilatesvitalite/codex-backups/blog-import-20260804-014508-576bbd15
+Outils:  /home/pilatesvitalite/codex-backups/blog-import-20260804-014508-576bbd15/migration-tools
+```
+
+Le rapport complet est dans `docs/BLOG_MIGRATION_20260803.md`.
+
+Sauvegarde de la traduction du blogue et de l'optimisation PWA:
+
+```text
+Serveur: /home/pilatesvitalite/codex-backups/blog-ui-pwa-perf-20260803-225319
+```
+
+Cette sauvegarde contient aussi
+`blog-item.blade.php.before-home-date-fix`, copie du composant partage avant la
+traduction finale des dates de l'accueil.
 
 Archive finale:
 
@@ -130,8 +151,38 @@ api/latest.php
 ```
 
 Le cron ecrit `backend/storage/next-course.json`. Ce cache n'est pas un
-snapshot de notification et ne change pas le total attendu de 28 elements.
+snapshot de notification et ne change pas le total attendu de 55 elements.
 Une absence de cours studio futur est representee par `course: null`.
+
+L'optimisation de chargement ajoute aussi:
+
+```text
+backend/lib/LatestContentCache.php
+backend/lib/Scraper.php
+backend/lib/bootstrap.php
+backend/cron/check-updates.php
+backend/config/config.example.php
+api/latest.php
+```
+
+Le cron ecrit `backend/storage/latest-content.json` de facon atomique.
+`latest.php` sert le cache pendant au plus 1 200 secondes et ne scrape en live
+que si le cache est absent ou expire. Ne pas ajouter cet endpoint au cache du
+service worker.
+
+Apres la migration du blogue, deployer aussi ensemble les changements de:
+
+```text
+backend/lib/Scraper.php
+backend/lib/bootstrap.php
+backend/cron/check-updates.php
+backend/config/config.example.php
+```
+
+Le scraper parcourt jusqu'a 10 pages du blogue, conserve jusqu'a 50 articles
+et trie explicitement les dates anglaises ou francaises. La date du hash est
+normalisee en `YYYY-MM-DD`, independamment du texte affiche. Le
+`config.php` prive live doit garder `BLOG_BASELINE_MODE=false` en exploitation.
 
 ## 4. Creer ou migrer la base MySQL
 
@@ -268,7 +319,7 @@ Le script utilise `flock` pour eviter deux executions simultanees. Suspendre la
 tache pendant une mise a niveau backend et ne la reactiver qu'apres deux
 passages manuels stables.
 
-Etat final du 2026-08-03:
+Etat historique avant la migration du blogue le 2026-08-03:
 
 ```text
 ACTIVE_PWA=1
@@ -281,6 +332,26 @@ passage automatique de 17:40:03 apres la mise a niveau Accueil:
 changed=0 notifications=0 items=28
 ```
 
+Etat courant apres traduction du blogue et optimisation PWA, confirme a
+23:02:59:
+
+```text
+une seule entree cron PWA correspondante
+28 articles de blogue distincts
+changed=0 notifications=0 items=55
+passage automatique 22:20:08: changed=0 notifications=0 items=55
+passage manuel final 22:28:31: changed=0 notifications=0 items=55
+amorcage silencieux des dates normalisees 23:02:35:
+changed=28 notifications=0 items=55
+passage normal 23:02:59: changed=0 notifications=0 items=55
+passage automatique 23:10:07: changed=0 notifications=0 items=55
+passage manuel apres correction de l'accueil 23:25:05:
+changed=0 notifications=0 items=55
+notification_logs: total=3, latest_id=3
+abonnements actifs: 5
+cache de contenu: 28 articles
+```
+
 ## 9. Tester les endpoints
 
 ```text
@@ -291,6 +362,15 @@ POST https://pilatesvitalite.webactiondemo.ca/pwa/api/preferences.php
 
 `backend/config/config.php` doit rester inaccessible en HTTP avec un statut
 403. `preferences.php` doit refuser les methodes non permises.
+
+Etat mesure apres optimisation de `latest.php`:
+
+```text
+source=cache
+28 articles
+5 appels: 0,067 a 0,103 seconde au total
+avant: 4,56 a 5,17 secondes
+```
 
 ## 10. Tester une notification
 
@@ -339,16 +419,40 @@ changed=0 notifications=0 items=28
 Passage automatique 17:40:03: changed=0 notifications=0 items=28
 ```
 
+Etat valide apres la migration des articles:
+
+```text
+28 articles sous /blogs, repartis sur 4 pages: 9, 9, 9 et 1
+Audit Laravel: 16/16 controles reussis
+API PWA: 28 articles, source=live, plus recent en premier
+Amorcage silencieux: changed=28 notifications=0 items=55
+Passages normaux: changed=0 notifications=0 items=55
+Passage automatique 22:20:08: changed=0 notifications=0 items=55
+Passage manuel final 22:28:31: changed=0 notifications=0 items=55
+```
+
 Le premier amorcage a envoye une notification Accueil a 5 abonnes a cause
 d'une formule de hash temporairement incompatible. La formule historique a ete
 restauree et le snapshot transitoire retire. Aucun nouvel envoi n'a eu lieu au
 second passage ni au passage automatique de 16:50:02. Le cron a ensuite ete
 reactive.
 
+Le premier controle manuel apres traduction des dates du blogue a aussi produit
+un faux positif avant la normalisation: 28 notifications journalisees et 112
+envois acceptes par le service push. Le cron etait suspendu. Les 28 journaux et
+28 snapshots ont ete sauvegardes puis retires par transaction, l'abonnement
+desactive pendant ce passage a ete restaure, puis un amorcage silencieux et un
+passage normal ont ramene l'etat a 3 journaux, 5 abonnements actifs et
+`changed=0 notifications=0 items=55`. Les dates des hashes sont maintenant en
+`YYYY-MM-DD`. Les preuves sont dans la sauvegarde
+`blog-ui-pwa-perf-20260803-225319`.
+
 ## 12. Rollback
 
 1. suspendre le cron;
-2. restaurer les fichiers backend/API depuis la sauvegarde serveur;
+2. restaurer les fichiers backend/API depuis la sauvegarde serveur; pour la
+   migration du blogue, utiliser
+   `/home/pilatesvitalite/codex-backups/blog-import-20260804-014508-576bbd15`;
 3. restaurer `index.html` et les anciens assets conserves;
 4. publier un `sw.js` de rollback avec un nouveau nom de cache;
 5. laisser la table additive de preferences en place: l'ancien code l'ignore;
